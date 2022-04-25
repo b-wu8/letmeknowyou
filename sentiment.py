@@ -1,49 +1,126 @@
-from ast import arg
 import numpy as np
 import torch
 import torchvision
 import os
+import pandas as pd
 import torchvision.transforms as tt
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from utils import get_args, check_args
 
-# args = get_args()
-# check_args(args)
+class BaseLine(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
 
-# Loading data from data folder /data/sentiment
-DATA_DIR = "data/sentiment/"
+        self.cnn1 = torch.nn.Conv2d(in_channels=3, out_channels=64, kernel_size=5)
+        self.relu1 = torch.nn.ReLU()
+        self.avgpool1 = torch.nn.AvgPool2d(kernel_size=3)
+        self.cnn2 = torch.nn.Conv2d(in_channels=64, out_channels=128, kernel_size=5)
+        self.relu2 = torch.nn.ReLU()
+        self.avgpool2 = torch.nn.AvgPool2d(kernel_size=3)
+        self.cnn3 = torch.nn.Conv2d(in_channels=128, out_channels=256, kernel_size=2)
+        self.relu3 = torch.nn.ReLU()
+        self.avgpool3 = torch.nn.AvgPool2d(kernel_size=1)
+        self.flatten = torch.nn.Flatten()
+        self.fc1 = torch.nn.Linear(1024, 512)
+        self.relu4 = torch.nn.ReLU()
+        self.fc2 = torch.nn.Linear(512, 256)
+        self.relu5 = torch.nn.ReLU()
+        self.output = torch.nn.Linear(256, 7)
+    
+    def forward(self, x):
+        out = self.cnn1(x)
+        out = self.relu1(out)
+        out = self.avgpool1(out)
+        out = self.cnn2(out)
+        out = self.relu2(out)
+        out = self.avgpool2(out)
+        out = self.cnn3(out)
+        out = self.relu3(out)
+        out = self.avgpool3(out)
+        out = self.flatten(out)
+        out = self.fc1(out)
+        out = self.relu4(out)
+        out = out.view(out.size(0), -1)
+        out = self.fc2(out)
+        out = self.relu5(out)
+        out = self.output(out)
+        return out 
 
-TRAIN_DIR = DATA_DIR + "train/"
-VAL_DIR = DATA_DIR + "val/"
 
-# There is a total of 6 classes of facial expressions, labeled from 0 to 6
-classes = os.listdir(TRAIN_DIR)
-print(classes)
 
-# Classes of facial expressions
-# Anger = 0
-# Digust = 1
-# Fear = 2
-# Happy = 3
-# Sad = 4
-# Surprise = 5
-# Neutal = 6
-expression = ['Anger','Disgust','Fear','Happy','Sad','Suprise','Neutral'] 
+if __name__ == "__main__":
+    # args = get_args()
+    # check_args(args)
 
-# Transform data, normalization
-train_transform = tt.Compose([tt.RandomHorizontalFlip(), tt.RandomRotation(10),
-                         tt.ToTensor()])
-valid_transform = tt.Compose([tt.ToTensor()])
+    # Loading data from data folder /data/sentiment
+    DATA_DIR = "data/sentiment/"
+    # LABEL_DIR = "data/sentiment/fer2013.csv"
 
-# Create train and valid datasets
-train = torchvision.datasets.ImageFolder(TRAIN_DIR, train_transform)
-valid = torchvision.datasets.ImageFolder(VAL_DIR, valid_transform)
+    TRAIN_DIR = DATA_DIR + "train/"
+    VAL_DIR = DATA_DIR + "val/"
+    MODEL_DIR = "models/"
 
-batch_size = 128
+    # Classes of facial expressions
+    # Anger = 0
+    # Digust = 1
+    # Fear = 2
+    # Happy = 3
+    # Sad = 4
+    # Surprise = 5
+    # Neutal = 6
+    expression = ['Anger','Disgust','Fear','Happy','Sad','Suprise','Neutral'] 
 
-# Load data for training and validation
-train = DataLoader(train, batch_size, shuffle=True, num_workers=3, pin_memory=True)
-valid = DataLoader(valid, batch_size * 2, num_workers=3, pin_memory=True)
+    # Transform data, normalization
+    train_transform = tt.Compose([tt.RandomHorizontalFlip(), tt.RandomRotation(10),
+                            tt.ToTensor(), tt.Normalize((0.5,),(0.5,))])
+    valid_transform = tt.Compose([tt.ToTensor()])
 
-# Algorithm structure
-###
+    # Create train and valid datasets
+    train = torchvision.datasets.ImageFolder(TRAIN_DIR, train_transform)
+    valid = torchvision.datasets.ImageFolder(VAL_DIR, valid_transform)
+
+    batch_size = 512
+    epoch = 10
+    learning_rate = 0.001
+
+    # Load data for training and validation
+    train_loader = DataLoader(train, batch_size, shuffle=True, num_workers=3, pin_memory=True)
+    valid_loader = DataLoader(valid, batch_size * 2, num_workers=3, pin_memory=True)
+
+    base_model = BaseLine()
+
+    loss_function = F.cross_entropy
+    train_loss=[]
+    val_loss=[]
+    train_acc=[]
+    val_acc=[]
+
+    for i in range(epoch):
+        optimizer = torch.optim.Adam(base_model.parameters(), lr=learning_rate)
+        score = 0
+        base_model.train()
+        for images, labels in train_loader:
+            out = base_model(images)
+            loss = loss_function(out, labels)
+            base_model.zero_grad()
+            loss.backward()
+            optimizer.step()
+            _, pred = torch.max(out,axis=1)
+            score += (pred==labels).sum()
+        acc=score/len(train)
+
+        score_val=0
+        for images,labels in valid_loader:
+            out = base_model(images)
+            val_loss = loss_function(out, labels)
+            _, pred_val = torch.max(out,axis=1)
+            score_val += (pred_val == labels).sum()
+        val_acc = score_val / len(valid)
+        
+        train_loss.append(loss)
+        #val_loss.append(val_loss)
+        train_acc.append(acc)
+        print("{}/{} Epochs  | Train Loss={:.4f}  |Train_Accuracy={:.4f} |Val_loss={:.4f}  |Val_Accuracy={:.4f}".format(i+1,epoch,loss,acc,val_loss,val_acc)  ) 
+
+    torch.save(base_model, MODEL_DIR+"base_model_bs512_lr0.001.pt")
