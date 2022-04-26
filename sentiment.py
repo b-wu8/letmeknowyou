@@ -202,11 +202,16 @@ if __name__ == "__main__":
     # torch.save(base_model, MODEL_DIR+"base_model_bs512_lr0.001.pt")
 
     model = ResNet()
+    model.cuda()
+    torch.cuda.empty_cache()
     for i in range(epoch):
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         score = 0
         model.train()
         for images, labels in train_loader:
+            if torch.cuda.is_available():
+                images = images.cuda()
+                labels = labels.cuda()
             out = model(images)
             loss = loss_function(out, labels)
             model.zero_grad()
@@ -218,6 +223,9 @@ if __name__ == "__main__":
 
         score_val=0
         for images,labels in valid_loader:
+            if torch.cuda.is_available():
+                images = images.cuda()
+                labels = labels.cuda()    
             out = model(images)
             val_loss = loss_function(out, labels)
             _, pred_val = torch.max(out,axis=1)
