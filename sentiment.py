@@ -1,12 +1,54 @@
 import numpy as np
 import torch
 import torchvision
-import os
 import pandas as pd
 import torchvision.transforms as tt
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-# from utils import get_args, check_args
+import argparse
+# from attention import ProjectorBlock, SpatialAttn
+
+import torch
+
+"""
+Attention blocks
+Reference: Learn To Pay Attention
+"""
+class ProjectorBlock(torch.nn.Module):
+    def __init__(self, in_features, out_features):
+        super(ProjectorBlock, self).__init__()
+        self.op = torch.nn.Conv2d(in_channels=in_features, out_channels=out_features,
+            kernel_size=1, padding=0, bias=False)
+
+    def forward(self, x):
+        return self.op(x)
+
+
+class SpatialAttn(torch.nn.Module):
+    def __init__(self, in_features, normalize_attn=True):
+        super(SpatialAttn, self).__init__()
+        self.normalize_attn = normalize_attn
+        self.op = torch.nn.Conv2d(in_channels=in_features, out_channels=1,
+            kernel_size=1, padding=0, bias=False)
+
+    def forward(self, l, g):
+        N, C, H, W = l.size()
+        c = self.op(l+g) # (batch_size,1,H,W)
+        if self.normalize_attn:
+            a = F.softmax(c.view(N,1,-1), dim=2).view(N,1,H,W)
+        else:
+            a = torch.sigmoid(c)
+        g = torch.mul(a.expand_as(l), l)
+        if self.normalize_attn:
+            g = g.view(N,C,-1).sum(dim=2) # (batch_size,C)
+        else:
+            g = F.adaptive_avg_pool2d(g, (1,1)).view(N,C)
+        return c.view(N,1,H,W), g
+
+
+
+
+
 
 class BaseLine(torch.nn.Module):
     def __init__(self):
@@ -50,6 +92,7 @@ class BaseLine(torch.nn.Module):
 class ResNet(torch.nn.Module):
     def __init__(self):
         super().__init__()
+
         self.cnn1 = torch.nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1)
         self.norm1 = torch.nn.BatchNorm2d(64)
         self.relu1 = torch.nn.ReLU(inplace=True)
@@ -125,13 +168,82 @@ class ResNet(torch.nn.Module):
         out = self.output(out)
         return out
 
+class VGG16_Attn(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        # conv blocks
+        self.conv1 = self.conv_block(3, 64, 2)
+        self.conv2 = self.conv_block(64, 128, 2)
+        self.conv3 = self.conv_block(128, 256, 3)
+        self.conv4 = self.conv_block(256, 512, 3)
+        self.conv5 = self.conv_block(512, 512, 3)
+        self.conv6 = self.conv_block(512, 512, 2, pool=True)
+        self.dense = torch.nn.Conv2d(in_channels=512, out_channels=512, kernel_size=1, padding=0, bias=True)
+        # attention blocks
+        self.projector = ProjectorBlock(256, 512)
+        self.attn1 = SpatialAttn(in_features=512, normalize_attn=True)
+        self.attn2 = SpatialAttn(in_features=512, normalize_attn=True)
+        self.attn3 = SpatialAttn(in_features=512, normalize_attn=True)
+        # final classification layer
+
+        self.classify = torch.nn.Linear(in_features=512*3, out_features=7, bias=True)
+        self._initialize_weights()
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        l1 = self.conv3(x)
+        x = F.max_pool2d(l1, kernel_size=2, stride=2, padding=0)
+        l2 = self.conv4(x)
+        x = F.max_pool2d(l2, kernel_size=2, stride=2, padding=0)
+        l3 = self.conv5(x)
+        x = F.max_pool2d(l3, kernel_size=2, stride=2, padding=0)
+        x = self.conv6(x)
+        g = self.dense(x) # batch_sizex512x1x1
+        # attention
+        c1, g1 = self.attn1(self.projector(l1), g)
+        c2, g2 = self.attn2(l2, g)
+        c3, g3 = self.attn3(l3, g)
+        g = torch.cat((g1,g2,g3), dim=1) # batch_sizex3C
+        # classification layer
+        x = self.classify(g) # batch_sizexnum_classes
+        return x
+
+    def conv_block(self, in_features, out_features, blocks, pool=False):
+        layers = []
+        for i in range(blocks):
+            conv2d = torch.nn.Conv2d(in_channels=in_features, out_channels=out_features, kernel_size=3, padding=1, bias=False)
+            layers += [conv2d, torch.nn.BatchNorm2d(out_features), torch.nn.ReLU(inplace=True)]
+            in_features = out_features
+            if pool:
+                layers += [torch.nn.MaxPool2d(kernel_size=2, stride=2)]
+        return torch.nn.Sequential(*layers)
+
+    def _initialize_weights(self):
+        for m in self.modules():
+            if isinstance(m, torch.nn.Conv2d):
+                torch.nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.BatchNorm2d):
+                torch.nn.init.constant_(m.weight, 1)
+                torch.nn.init.constant_(m.bias, 0)
+            elif isinstance(m, torch.nn.Linear):
+                torch.nn.init.normal_(m.weight, 0, 0.01)
+                torch.nn.init.constant_(m.bias, 0)
+
+
+
 if __name__ == "__main__":
-    # args = get_args()
-    # check_args(args)
+    # parser = argparse.ArgumentParser(description='Sentiment Analysis with age and gender')
+    # parser.add_argument('--epochs', default=300, type=int)
+    # parser.add_argument('--batch_size', default=128, type=int)
+    # parser.add_argument('--lr', default=0.1, type=float)
 
     # Loading data from data folder /data/sentiment
-    DATA_DIR = "data/sentiment/"
-    # DATA_DIR = "../input/facial-expression-dataset-image-folders-fer2013/data/"
+#     DATA_DIR = "data/sentiment/"
+    DATA_DIR = "../input/facial-expression-dataset-image-folders-fer2013/data/"
 
     TRAIN_DIR = DATA_DIR + "train/"
     VAL_DIR = DATA_DIR + "val/"
@@ -164,44 +276,15 @@ if __name__ == "__main__":
     train_loader = DataLoader(train, batch_size, shuffle=True, num_workers=3, pin_memory=True)
     valid_loader = DataLoader(valid, batch_size * 2, num_workers=3, pin_memory=True)
 
-
     loss_function = F.cross_entropy
     train_loss=[]
     val_loss=[]
     train_acc=[]
     val_acc=[]
 
-    # base_model = BaseLine()
-    # for i in range(epoch):
-    #     optimizer = torch.optim.Adam(base_model.parameters(), lr=learning_rate)
-    #     score = 0
-    #     base_model.train()
-    #     for images, labels in train_loader:
-    #         out = base_model(images)
-    #         loss = loss_function(out, labels)
-    #         base_model.zero_grad()
-    #         loss.backward()
-    #         optimizer.step()
-    #         _, pred = torch.max(out,axis=1)
-    #         score += (pred==labels).sum()
-    #     acc=score/len(train)
-
-    #     score_val=0
-    #     for images,labels in valid_loader:
-    #         out = base_model(images)
-    #         val_loss = loss_function(out, labels)
-    #         _, pred_val = torch.max(out,axis=1)
-    #         score_val += (pred_val == labels).sum()
-    #     val_acc = score_val / len(valid)
-        
-    #     train_loss.append(loss)
-    #     #val_loss.append(val_loss)
-    #     train_acc.append(acc)
-    #     print("{}/{} Epochs  | Train Loss={:.4f}  |Train_Accuracy={:.4f} |Val_loss={:.4f}  |Val_Accuracy={:.4f}".format(i+1,epoch,loss,acc,val_loss,val_acc)  ) 
-
-    # torch.save(base_model, MODEL_DIR+"base_model_bs512_lr0.001.pt")
-
-    model = ResNet()
+    # model = BaseLine()
+    # model = ResNet()
+    model = VGG16_Attn()
     model.cuda()
     torch.cuda.empty_cache()
     for i in range(epoch):
@@ -236,4 +319,4 @@ if __name__ == "__main__":
         #val_loss.append(val_loss)
         train_acc.append(acc)
         print("{}/{} Epochs  | Train Loss={:.4f}  |Train_Accuracy={:.4f} |Val_loss={:.4f}  |Val_Accuracy={:.4f}".format(i+1,epoch,loss,acc,val_loss,val_acc)  ) 
-    # torch.save(model, "ResNet_Max_bs128_lr0.001.pt")
+    torch.save(model, "VGG16_Attention_bs128_lr0.001.pt")
