@@ -58,7 +58,7 @@ class ResNet(torch.nn.Module):
         self.norm2 = torch.nn.BatchNorm2d(128)
         self.relu2 = torch.nn.ReLU(inplace=True)
 
-        self.avgpool1 = torch.nn.AvgPool2d(2)
+        self.maxpool1 = torch.nn.MaxPool2d(2)
 
         # ResNet Layer 1
         self.cnn3 = torch.nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1)
@@ -72,13 +72,13 @@ class ResNet(torch.nn.Module):
         self.norm5 = torch.nn.BatchNorm2d(256)
         self.relu5 = torch.nn.ReLU(inplace=True) 
 
-        self.avgpool2 = torch.nn.AvgPool2d(2)
+        self.maxpool2 = torch.nn.MaxPool2d(2)
 
         self.cnn6 = torch.nn.Conv2d(in_channels=256, out_channels=512, kernel_size=3, padding=1)
         self.norm6 = torch.nn.BatchNorm2d(512)
         self.relu6 = torch.nn.ReLU(inplace=True)
 
-        self.avgpool3 = torch.nn.AvgPool2d(2)
+        self.maxpool3 = torch.nn.MaxPool2d(2)
 
         # ResNet Layer 2
         self.cnn7 = torch.nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, padding=1)
@@ -88,7 +88,7 @@ class ResNet(torch.nn.Module):
         self.norm8 = torch.nn.BatchNorm2d(512)
         self.relu8 = torch.nn.ReLU(inplace=True) 
 
-        self.avgpool4 = torch.nn.AvgPool2d(4)
+        self.maxpool4 = torch.nn.MaxPool2d(4)
         self.flatten = torch.nn.Flatten()
         self.output = torch.nn.Linear(512, 7)
 
@@ -99,7 +99,7 @@ class ResNet(torch.nn.Module):
         out = self.cnn2(out)
         out = self.norm2(out)
         out = self.relu2(out)
-        out = self.avgpool1(out)
+        out = self.maxpool1(out)
         out = self.cnn3(out)
         out = self.norm3(out)
         out = self.relu3(out)
@@ -109,18 +109,18 @@ class ResNet(torch.nn.Module):
         out = self.cnn5(out)
         out = self.norm5(out)
         out = self.relu5(out) 
-        out = self.avgpool2(out)
+        out = self.maxpool2(out)
         out = self.cnn6(out)
         out = self.norm6(out)
         out = self.relu6(out)
-        out = self.avgpool3(out)
+        out = self.maxpool3(out)
         out = self.cnn7(out)
         out = self.norm7(out)
         out = self.relu7(out)
         out = self.cnn8(out)
         out = self.norm8(out)
         out = self.relu8(out)
-        out = self.avgpool4(out)
+        out = self.maxpool4(out)
         out = self.flatten(out)
         out = self.output(out)
         return out
@@ -131,7 +131,7 @@ if __name__ == "__main__":
 
     # Loading data from data folder /data/sentiment
     DATA_DIR = "data/sentiment/"
-    # LABEL_DIR = "data/sentiment/fer2013.csv"
+    # DATA_DIR = "../input/facial-expression-dataset-image-folders-fer2013/data/"
 
     TRAIN_DIR = DATA_DIR + "train/"
     VAL_DIR = DATA_DIR + "val/"
@@ -149,14 +149,14 @@ if __name__ == "__main__":
 
     # Transform data, normalization
     train_transform = tt.Compose([tt.RandomHorizontalFlip(), tt.RandomRotation(10),
-                            tt.ToTensor(), tt.Normalize((0.5,),(0.5,))])
+                            tt.ToTensor()])
     valid_transform = tt.Compose([tt.ToTensor()])
 
     # Create train and valid datasets
     train = torchvision.datasets.ImageFolder(TRAIN_DIR, train_transform)
     valid = torchvision.datasets.ImageFolder(VAL_DIR, valid_transform)
 
-    batch_size = 512
+    batch_size = 128
     epoch = 10
     learning_rate = 0.001
 
@@ -236,3 +236,4 @@ if __name__ == "__main__":
         #val_loss.append(val_loss)
         train_acc.append(acc)
         print("{}/{} Epochs  | Train Loss={:.4f}  |Train_Accuracy={:.4f} |Val_loss={:.4f}  |Val_Accuracy={:.4f}".format(i+1,epoch,loss,acc,val_loss,val_acc)  ) 
+    # torch.save(model, "ResNet_Max_bs128_lr0.001.pt")
