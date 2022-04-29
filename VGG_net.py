@@ -149,7 +149,7 @@ class VGG(torch.nn.Module):
             torch.nn.Linear(512 * self.height * self.width, 4096),
             torch.nn.ReLU(True),
             # torch.nn.Dropout(p=0.5), # changed to 0.2 after the 1st run
-            torch.nn.Dropout2d(p=0.2),
+            # torch.nn.Dropout2d(p=0.2),
             # torch.nn.Linear(4096, 1024), # changed after the 1st run
             torch.nn.Linear(4096, 512),
             torch.nn.ReLU(True),
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
     batch_size = 64 # 512 ow
     epoch = 10
-    learning_rate = 0.001 # 0.01 ow
+    learning_rate = 0.0005 # 0.01 ow
 
     # Load data for training and validation
     train_loader = DataLoader(train, batch_size, shuffle=True, num_workers=3, pin_memory=True)
