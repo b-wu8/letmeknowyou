@@ -1,2 +1,3 @@
 
 models/VGG16_model_bs64_lr0.0005_noDropOut.pt
+models/VGG16_model_bs64_lr0.0005_2DropOut0.1.pt
