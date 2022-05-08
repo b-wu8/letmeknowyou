@@ -79,7 +79,7 @@ if __name__ == "__main__":
             seed=42
         )
         test_datagen = ImageDataGenerator(
-            rescale=1 / 255.0,)
+            rescale=1 / 255.0)
             
         valid_generator = test_datagen.flow_from_directory(
             directory=VAL_DIR,
