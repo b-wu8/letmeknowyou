@@ -4,7 +4,6 @@ import os
 import PIL
 from sklearn.utils import shuffle
 import tensorflow as tf
-from keras_preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.callbacks import ModelCheckpoint
 
 from tensorflow.keras.callbacks import (EarlyStopping, ReduceLROnPlateau,
@@ -14,7 +13,6 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow import keras
 from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
-from sklearn.preprocessing import LabelEncoder
 import pandas as pd
 import numpy as np
 
@@ -86,28 +84,12 @@ if __name__ == "__main__":
     age_test = create_label_dataset(age_test)
 
     with tf.device('GPU:0'):
-        # datagen = ImageDataGenerator(
-        # rescale=1 / 255.0,
-        # rotation_range = 10,
-        # zoom_range = 0.1,
-        # horizontal_flip = True
-        # )
-
-        # train_generator = datagen.flow(img_train, age_train, batch_size = bs, subset = 'training', shuffle=True, seed = 43)
-        # # test_datagen = ImageDataGenerator(rescale=1 / 255.0)
-
-        # valid_generator = datagen.flow(img_val, age_val, batch_size = bs, subset = 'Validation', shuffle=True, seed=43)
 
         train_dataset = tf.data.Dataset.from_tensor_slices((img_train, age_train))
         val_dataset = tf.data.Dataset.from_tensor_slices((img_val, age_val))
 
         train_dataset = train_dataset.shuffle(SHUFFLE_BUFFER_SIZE).batch(bs)
         val_dataset = val_dataset.batch(bs)
-        # for x, y in train_dataset:
-        #     print(x.shape)
-        #     print(y.shape)
-        #     break
-
 
         model = Sequential([
         layers.Conv2D(256, kernel_size=[3,3] ,padding='same', activation='relu'),
@@ -135,20 +117,19 @@ if __name__ == "__main__":
         ])
 
 
-        # model.summary()
-        training_weights='./weights'  #这里是保存每次训练权重的  如果需要自己取消注释
+        training_weights='./weights'  #training weight path
         checkpoint_period = ModelCheckpoint(training_weights + 'ep{epoch:03d}-loss{loss:.3f}-val_loss{val_loss:.3f}.h5',
                                             monitor='val_loss', save_weights_only=True, save_best_only=False, period=1)
-        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, verbose=1) #学习率衰减
-        early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1) # val_loss 不下降时 停止训练 防止过拟合
-        tensorboard = TensorBoard(log_dir=LOG_DIR)  #训练日志
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=4, verbose=1) #lr decreasing with time
+        early_stopping = EarlyStopping(monitor='val_loss', min_delta=0, patience=10, verbose=1) # val_loss not descresing, stop training to avoid overfitting
+        tensorboard = TensorBoard(log_dir=LOG_DIR)  #Training logs
         optimizer=tf.keras.optimizers.Adam(learning_rate=lr)
         model.compile(loss=tf.keras.losses.categorical_crossentropy, metrics='acc',optimizer=optimizer)
         history = model.fit(train_dataset,validation_data=val_dataset, epochs=epochs,
                             callbacks=[tensorboard, early_stopping,checkpoint_period,reduce_lr])
         model.evaluate(val_dataset,verbose=1)
         model.save(MODEL_DIR+'base_model.h5')
-    print(history.history.keys())
+    #print(history.history.keys())
     acc = history.history['acc']
     val_acc = history.history['val_acc']
 
