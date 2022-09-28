@@ -8,6 +8,10 @@ This is the machine learning project in computer vision. We choose to focus on h
 
 Bohan Wu, Harry Qi, Kun Liang, Naiqiao Ye
 
+## Research Question
+
+Can machine learn human faces and expressions from images?
+
 ## Reference
 
 - Eidinger, E., Enbar, R., & Hassner, T. (2014). Age and gender estimation of unfiltered faces. IEEE Transactions on Information Forensics and Security, 9(12), 2170–2179. https://doi.org/10.1109/tifs.2014.2359646
